@@ -35,6 +35,30 @@ func TestAgentCollectsIntoBufferWithoutExporters(t *testing.T) {
 	if a.BufferLen() == 0 {
 		t.Fatalf("expected buffered samples, got 0")
 	}
+
+	samples := a.PeekSamples(1)
+	if len(samples) == 0 {
+		t.Fatalf("expected at least one sample")
+	}
+	if _, ok := samples[0].Values["runtime.goroutines"]; !ok {
+		t.Fatalf("expected runtime.goroutines in sample")
+	}
+	if _, ok := samples[0].Values["runtime.heap_alloc_bytes"]; !ok {
+		t.Fatalf("expected runtime.heap_alloc_bytes in sample")
+	}
+}
+
+func TestCollectSampleMergesRuntimeAndAppMetrics(t *testing.T) {
+	a := New(Config{})
+	a.Metrics().Counter("app.events", map[string]string{"device": "x"}).Inc()
+
+	s := a.collectSample()
+	if _, ok := s.Values["runtime.gc_count"]; !ok {
+		t.Fatalf("expected runtime.gc_count in sample")
+	}
+	if _, ok := s.Values["app.events|device=x"]; !ok {
+		t.Fatalf("expected app metric in sample")
+	}
 }
 
 type recordingExporter struct {

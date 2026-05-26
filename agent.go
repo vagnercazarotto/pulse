@@ -3,6 +3,7 @@ package pulse
 import (
 	"context"
 	"errors"
+	"runtime"
 	"sync"
 	"time"
 
@@ -174,10 +175,50 @@ func (a *Agent) BufferOverflowCount() uint64 {
 	return a.buffer.OverflowCount()
 }
 
+// PeekSamples returns up to n buffered samples in insertion order.
+func (a *Agent) PeekSamples(n int) []Sample {
+	return a.buffer.Peek(n)
+}
+
 func (a *Agent) collectSample() Sample {
+	values := collectRuntimeValues()
+	app := a.registry.SnapshotValues()
+	for k, v := range app {
+		if _, exists := values[k]; !exists {
+			values[k] = v
+		}
+	}
+
 	return Sample{
 		Timestamp: time.Now().UTC(),
-		Values:    a.registry.SnapshotValues(),
+		Values:    values,
+	}
+}
+
+func collectRuntimeValues() map[string]float64 {
+	ms := runtime.MemStats{}
+	runtime.ReadMemStats(&ms)
+
+	lastPause := uint64(0)
+	if ms.NumGC > 0 {
+		idx := (ms.NumGC - 1) % uint32(len(ms.PauseNs))
+		lastPause = ms.PauseNs[idx]
+	}
+
+	return map[string]float64{
+		"runtime.goroutines":        float64(runtime.NumGoroutine()),
+		"runtime.heap_alloc_bytes":  float64(ms.HeapAlloc),
+		"runtime.heap_inuse_bytes":  float64(ms.HeapInuse),
+		"runtime.heap_sys_bytes":    float64(ms.HeapSys),
+		"runtime.stack_inuse_bytes": float64(ms.StackInuse),
+		"runtime.gc_count":          float64(ms.NumGC),
+		"runtime.gc_pause_ns_last":  float64(lastPause),
+		"runtime.gc_pause_total_ns": float64(ms.PauseTotalNs),
+		"runtime.next_gc_bytes":     float64(ms.NextGC),
+		"runtime.mallocs_total":     float64(ms.Mallocs),
+		"runtime.frees_total":       float64(ms.Frees),
+		"runtime.cgo_calls_total":   float64(runtime.NumCgoCall()),
+		"runtime.gc_cpu_fraction":   ms.GCCPUFraction,
 	}
 }
 
