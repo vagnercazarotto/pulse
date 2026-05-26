@@ -16,6 +16,7 @@ type Config struct {
 	ExportInterval  time.Duration
 	ExportTimeout   time.Duration
 	BufferSize      int
+	DisableHardware bool
 	ShutdownTimeout time.Duration
 	Exporters       []Exporter
 	WAL             *WALConfig

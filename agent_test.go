@@ -61,6 +61,14 @@ func TestCollectSampleMergesRuntimeAndAppMetrics(t *testing.T) {
 	}
 }
 
+func TestCollectSampleWithHardwareDisabled(t *testing.T) {
+	a := New(Config{DisableHardware: true})
+	s := a.collectSample()
+	if _, ok := s.Values["runtime.goroutines"]; !ok {
+		t.Fatalf("expected runtime metrics even when hardware is disabled")
+	}
+}
+
 type recordingExporter struct {
 	mu      sync.Mutex
 	batches int

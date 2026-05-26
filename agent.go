@@ -16,6 +16,7 @@ type Agent struct {
 	registry *metrics.Registry
 	buffer   *RingBuffer
 	wal      *WAL
+	hw       *hardwareCollector
 
 	mu      sync.Mutex
 	started bool
@@ -37,6 +38,7 @@ func New(cfg Config) *Agent {
 		cfg:      resolved,
 		registry: metrics.NewRegistry(),
 		buffer:   buf,
+		hw:       newHardwareCollector(),
 	}
 }
 
@@ -182,6 +184,11 @@ func (a *Agent) PeekSamples(n int) []Sample {
 
 func (a *Agent) collectSample() Sample {
 	values := collectRuntimeValues()
+	if !a.cfg.DisableHardware && a.hw != nil {
+		for k, v := range a.hw.Collect() {
+			values[k] = v
+		}
+	}
 	app := a.registry.SnapshotValues()
 	for k, v := range app {
 		if _, exists := values[k]; !exists {
