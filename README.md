@@ -2,10 +2,23 @@
 
 [![status: placeholder](https://img.shields.io/badge/status-placeholder-lightgrey)](#)
 
-Embedded observability for industrial Go gateways.
+Embedded observability for industrial Go gateways and other edge Go services.
 
-pulse is designed for constrained edge environments where reliability matters more than cloud dependency.
-It runs in-process, keeps local telemetry during outages, and is being built with an offline-first architecture.
+pulse is a Go library you embed directly into your process to collect runtime metrics, application metrics, and local hardware telemetry with offline-first buffering and export.
+
+Use it when you need:
+
+- in-process observability with minimal operational overhead
+- local buffering during network or backend outages
+- Linux edge visibility without depending on a cloud agent
+- a small integration surface for Go services and gateways
+
+Start here:
+
+- Install: `go get github.com/vagnercazarotto/pulse`
+- Minimal integration: see `Quick start` below
+- Runnable examples: `examples/basic` and `examples/custom-exporter`
+- Reference docs: `docs/index.html`, `docs/quickstart.html`, `docs/current-reference.html`
 
 ## Project status
 
@@ -38,6 +51,25 @@ Deferred to v0.2:
 - Full Windows PDH implementation
 - Additional advanced exporters
 
+## Install in another project
+
+Add pulse to your Go module:
+
+```bash
+go get github.com/vagnercazarotto/pulse
+```
+
+Import it in your application:
+
+```go
+import "github.com/vagnercazarotto/pulse"
+```
+
+## Examples
+
+- Basic integration: `examples/basic`
+- Custom exporter: `examples/custom-exporter`
+
 ## Quick start (current API baseline)
 
 ```go
@@ -65,24 +97,122 @@ func main() {
 }
 ```
 
+## Usage examples
+
+### Basic agent with application metrics
+
+```go
+package main
+
+import (
+	"log"
+	"time"
+
+	"github.com/vagnercazarotto/pulse"
+)
+
+func main() {
+	agent := pulse.New(pulse.Config{
+		CollectInterval: 2 * time.Second,
+	})
+
+	requests := agent.Metrics().Counter("app.requests_total", map[string]string{
+		"service": "gateway",
+	})
+
+	temperature := agent.Metrics().Gauge("app.temperature_c", map[string]string{
+		"device": "boiler-01",
+	})
+
+	if err := agent.Start(); err != nil {
+		log.Fatal(err)
+	}
+	defer agent.Stop()
+
+	requests.Inc()
+	temperature.Set(72.4)
+
+	time.Sleep(5 * time.Second)
+}
+```
+
+### Local HTTP visibility
+
+```go
+package main
+
+import (
+	"log"
+
+	"github.com/vagnercazarotto/pulse"
+)
+
+func main() {
+	httpExporter := pulse.NewHTTPExporter(pulse.HTTPExporterConfig{
+		Addr: "127.0.0.1:9090",
+	})
+
+	agent := pulse.New(pulse.Config{
+		Exporters: []pulse.Exporter{httpExporter},
+	})
+
+	if err := agent.Start(); err != nil {
+		log.Fatal(err)
+	}
+	defer agent.Stop()
+
+	select {}
+}
+```
+
+Available endpoints:
+
+- `/health`
+- `/metrics.json`
+- `/metrics`
+
+### Log exporter plus WAL persistence
+
+```go
+package main
+
+import (
+	"log"
+	"time"
+
+	"github.com/vagnercazarotto/pulse"
+)
+
+func main() {
+	logExporter := pulse.NewLogExporter(pulse.LogExporterConfig{Pretty: true})
+
+	agent := pulse.New(pulse.Config{
+		ExportInterval: 1 * time.Second,
+		Exporters:      []pulse.Exporter{logExporter},
+		WAL: &pulse.WALConfig{
+			Dir: "./pulse-wal",
+		},
+	})
+
+	errors := agent.Metrics().Counter("modbus.errors_total", map[string]string{
+		"device": "boiler-01",
+	})
+
+	if err := agent.Start(); err != nil {
+		log.Fatal(err)
+	}
+	defer agent.Stop()
+
+	errors.Inc()
+	time.Sleep(2 * time.Second)
+}
+```
+
 ## Documentation
 
-- Home: [docs/index.html](docs/index.html)
-- Quickstart: [docs/quickstart.html](docs/quickstart.html)
-- Current reference: [docs/current-reference.html](docs/current-reference.html)
-
-## Publish docs with GitHub Pages
-
-1. Open repository `Settings` on GitHub.
-2. Go to `Pages`.
-3. In `Build and deployment`, set `Source` to `Deploy from a branch`.
-4. Select branch `main`.
-5. Select folder `/docs`.
-6. Save.
-
-Expected URL:
-
-- https://vagnercazarotto.github.io/pulse/
+- Home: [Documentation Home](docs/index.html)
+- Quickstart: [Quickstart Guide](docs/quickstart.html)
+- Current reference: [Current Reference](docs/current-reference.html)
 
 ## Default behavior
 

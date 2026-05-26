@@ -20,6 +20,12 @@
 
   <main class="container">
     <section class="card">
+      <h2>0. Install and import</h2>
+      <pre><code>go get github.com/vagnercazarotto/pulse</code></pre>
+      <pre><code>import "github.com/vagnercazarotto/pulse"</code></pre>
+    </section>
+
+    <section class="card">
       <h2>1. Recommended default config</h2>
       <pre><code>CollectInterval: 10 * time.Second
 ExportInterval:  10 * time.Second
@@ -64,6 +70,30 @@ latency, err := agent.Metrics().Histogram(
         <li>Retry uses exponential backoff with jitter, up to 5 attempts.</li>
         <li>When the buffer is full, oldest-evict is applied and overflow_count is incremented.</li>
       </ul>
+    </section>
+
+    <section class="card">
+      <h2>5. End-to-end example</h2>
+      <pre><code>httpExporter := pulse.NewHTTPExporter(pulse.HTTPExporterConfig{
+  Addr: "127.0.0.1:9090",
+})
+
+agent := pulse.New(pulse.Config{
+  Exporters: []pulse.Exporter{httpExporter},
+  WAL: &amp;pulse.WALConfig{Dir: "./pulse-wal"},
+})
+
+requests := agent.Metrics().Counter("app.requests_total", map[string]string{
+  "service": "gateway",
+})
+
+if err := agent.Start(); err != nil {
+  log.Fatal(err)
+}
+defer agent.Stop()
+
+requests.Inc()</code></pre>
+      <small>Use the HTTP exporter for local visibility and WAL for local persistence during outages.</small>
     </section>
   </main>
 </body>

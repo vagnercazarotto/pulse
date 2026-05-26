@@ -33,3 +33,6 @@ go.work.sum
 
 # Local documentation workspace (temporarily not published)
 pulse/
+
+# Local Go build cache
+.gocache/
