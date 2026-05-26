@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pulse docs - home</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1>pulse documentation</h1>
+      <nav>
+        <a href="index.html">Home</a>
+        <a href="quickstart.html">Quickstart</a>
+        <a href="current-reference.html">Current reference</a>
+      </nav>
+      <small>Official repository: github.com/vagnercazarotto/pulse</small>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>What pulse is</h2>
+      <p>
+        pulse is a Go library for embedded observability in industrial gateways.
+        The current focus is to document only what is required to start v0.1.0 implementation.
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>Approved decisions</h2>
+      <ul>
+        <li>Target platform: Raspberry Pi 4 (Linux ARM64).</li>
+        <li>Default collection interval: 10 seconds.</li>
+        <li>Default buffer size: 10,000 samples.</li>
+        <li>Minimum offline window: 24 hours.</li>
+        <li>Lifecycle: Stop is idempotent, Start after Stop returns an error.</li>
+        <li>Official shutdown timeout: 5 seconds.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Escopo v0.1.0</h2>
+      <ul>
+        <li>Runtime collector.</li>
+        <li>Hardware collector Linux (cpu, mem, disk, load).</li>
+        <li>Metrics core com labels.</li>
+        <li>Ring buffer + WAL.</li>
+        <li>Exporters HTTP e Log.</li>
+        <li>Dashboard local + health endpoints.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

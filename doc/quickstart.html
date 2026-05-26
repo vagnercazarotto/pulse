@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pulse docs - quickstart</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1>pulse quickstart</h1>
+      <nav>
+        <a href="index.html">Home</a>
+        <a href="quickstart.html">Quickstart</a>
+        <a href="current-reference.html">Current reference</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>1. Recommended default config</h2>
+      <pre><code>CollectInterval: 10 * time.Second
+BufferSize:      10_000
+OfflineWindow:   24h
+ShutdownTimeout: 5 * time.Second</code></pre>
+    </section>
+
+    <section class="card">
+      <h2>2. Agent lifecycle</h2>
+      <ul>
+        <li>Start initializes collectors and exporters.</li>
+        <li>Stop is idempotent.</li>
+        <li>Start after Stop on the same instance returns ErrAgentStopped.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>3. Metrics with labels</h2>
+      <pre><code>errors := agent.Counter("modbus.errors", map[string]string{
+  "device": "boiler-01",
+  "protocol": "tcp",
+})
+
+latency, err := agent.Histogram(
+  "modbus.poll_latency_s",
+  map[string]string{"device": "boiler-01"},
+  0.01, 0.05, 0.1, 0.5, 1.0,
+)</code></pre>
+      <small>Metric identity: name + labels sorted by key.</small>
+    </section>
+
+    <section class="card">
+      <h2>4. Export and resilience</h2>
+      <ul>
+        <li>Exporter receives context for timeout/cancellation.</li>
+        <li>Retry uses exponential backoff with jitter, up to 5 attempts.</li>
+        <li>When the buffer is full, oldest-evict is applied and overflow_count is incremented.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

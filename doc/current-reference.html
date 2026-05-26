@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pulse docs - current reference</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1>current reference for implementation</h1>
+      <nav>
+        <a href="index.html">Home</a>
+        <a href="quickstart.html">Quickstart</a>
+        <a href="current-reference.html">Current reference</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>Exporter contract (v0.1.0)</h2>
+      <pre><code>type Exporter interface {
+  Name() string
+  Export(ctx context.Context, samples []Sample) error
+  Close() error
+}</code></pre>
+    </section>
+
+    <section class="card">
+      <h2>Retry and backoff</h2>
+      <ul>
+        <li>Max retries: 5</li>
+        <li>Initial backoff: 500ms</li>
+        <li>Backoff cap: 30s</li>
+        <li>Strategy: exponential + jitter</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>WAL (persistence)</h2>
+      <ul>
+        <li>Default mode: batched fsync (1s or 100 records).</li>
+        <li>Optional strict mode: fsync per write.</li>
+        <li>Format: length prefix + payload + crc32.</li>
+        <li>Replay in order; partial tail is truncated to the last valid record.</li>
+        <li>Rotation: 64 MiB segments, 512 MiB total cap.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Out of scope for v0.1.0</h2>
+      <ul>
+        <li>Full cross-platform temperature support.</li>
+        <li>Full Windows PDH implementation.</li>
+        <li>Additional advanced exporters.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
