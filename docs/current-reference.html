@@ -69,7 +69,7 @@
         <li>Format: length prefix + payload + crc32.</li>
         <li>Replay in order; partial tail is truncated to the last valid record.</li>
         <li>Rotation: 64 MiB segments, 512 MiB total cap.</li>
-        <li>The current build prioritizes durable append and startup replay; segment cleanup remains conservative.</li>
+        <li>Successful exports acknowledge WAL segments and compact acknowledged files.</li>
       </ul>
     </section>
 

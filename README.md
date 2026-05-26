@@ -232,7 +232,7 @@ When zero values are provided in `pulse.Config`, defaults are applied:
 Optional WAL:
 
 - Set `Config.WAL` with a valid directory to enable disk persistence and replay.
-- Current implementation focuses on durable segmented writes and startup replay; segment cleanup remains conservative.
+- Successful exports acknowledge WAL segments and trigger compaction of acknowledged files.
 
 ## Runtime metrics currently collected
 

@@ -45,6 +45,11 @@ type WALReplayStats struct {
 	TruncatedTail  bool
 }
 
+type WALReplayedSample struct {
+	Sample  Sample
+	Segment int
+}
+
 // WAL persists records to disk in segmented files.
 type WAL struct {
 	mu sync.Mutex
@@ -126,40 +131,51 @@ func (w *WAL) Close() error {
 }
 
 func (w *WAL) WriteSample(sample Sample) error {
+	_, err := w.WriteSampleWithSegment(sample)
+	return err
+}
+
+func (w *WAL) WriteSampleWithSegment(sample Sample) (int, error) {
 	payload, err := json.Marshal(sample)
 	if err != nil {
-		return err
+		return -1, err
 	}
-	return w.WriteRecord(payload)
+	return w.WriteRecordWithSegment(payload)
 }
 
 func (w *WAL) WriteRecord(payload []byte) error {
+	_, err := w.WriteRecordWithSegment(payload)
+	return err
+}
+
+func (w *WAL) WriteRecordWithSegment(payload []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	if w.currentFile == nil {
-		return fmt.Errorf("pulse: wal is closed")
+		return -1, fmt.Errorf("pulse: wal is closed")
 	}
 	if int64(len(payload)) > maxWALRecordSize {
-		return fmt.Errorf("pulse: wal record too large: %d", len(payload))
+		return -1, fmt.Errorf("pulse: wal record too large: %d", len(payload))
 	}
 
 	recordLen := int64(8 + len(payload))
 	if w.currentSize+recordLen > w.cfg.SegmentSize {
 		if err := w.rotate(); err != nil {
-			return err
+			return -1, err
 		}
 	}
+	segment := w.currentSegment
 
 	header := make([]byte, 8)
 	binary.LittleEndian.PutUint32(header[0:4], uint32(len(payload)))
 	binary.LittleEndian.PutUint32(header[4:8], crc32.ChecksumIEEE(payload))
 
 	if _, err := w.currentFile.Write(header); err != nil {
-		return err
+		return -1, err
 	}
 	if _, err := w.currentFile.Write(payload); err != nil {
-		return err
+		return -1, err
 	}
 
 	w.currentSize += recordLen
@@ -167,13 +183,16 @@ func (w *WAL) WriteRecord(payload []byte) error {
 
 	if w.cfg.StrictSync || w.pendingSinceSync >= w.cfg.SyncEvery || time.Since(w.lastSync) >= w.cfg.SyncInterval {
 		if err := w.currentFile.Sync(); err != nil {
-			return err
+			return -1, err
 		}
 		w.pendingSinceSync = 0
 		w.lastSync = time.Now()
 	}
 
-	return w.ensureCapacity()
+	if err := w.ensureCapacity(); err != nil {
+		return -1, err
+	}
+	return segment, nil
 }
 
 // AcknowledgeThrough marks segments up to index as export-confirmed.
@@ -182,6 +201,21 @@ func (w *WAL) AcknowledgeThrough(segment int) {
 	defer w.mu.Unlock()
 	if segment > w.acknowledgedThrough {
 		w.acknowledgedThrough = segment
+		w.compactAcknowledgedLocked()
+	}
+}
+
+func (w *WAL) compactAcknowledgedLocked() {
+	segments, err := listSegments(w.cfg.Dir)
+	if err != nil {
+		return
+	}
+	for _, seg := range segments {
+		idx := segmentIndex(seg)
+		if idx < 0 || idx > w.acknowledgedThrough || idx == w.currentSegment {
+			continue
+		}
+		_ = os.Remove(filepath.Join(w.cfg.Dir, seg))
 	}
 }
 
@@ -216,19 +250,53 @@ func (w *WAL) ReplayRecords() ([][]byte, WALReplayStats, error) {
 }
 
 func (w *WAL) ReplaySamples() ([]Sample, WALReplayStats, error) {
-	recs, stats, err := w.ReplayRecords()
+	items, stats, err := w.ReplaySamplesWithSegments()
 	if err != nil {
 		return nil, stats, err
 	}
-	out := make([]Sample, 0, len(recs))
-	for _, rec := range recs {
-		var s Sample
-		if err := json.Unmarshal(rec, &s); err != nil {
-			stats.CorruptRecords++
-			continue
-		}
-		out = append(out, s)
+	out := make([]Sample, 0, len(items))
+	for _, item := range items {
+		out = append(out, item.Sample)
 	}
+	return out, stats, nil
+}
+
+func (w *WAL) ReplaySamplesWithSegments() ([]WALReplayedSample, WALReplayStats, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	segments, err := listSegments(w.cfg.Dir)
+	if err != nil {
+		return nil, WALReplayStats{}, err
+	}
+
+	stats := WALReplayStats{Segments: len(segments)}
+	out := make([]WALReplayedSample, 0)
+
+	for i, seg := range segments {
+		isLast := i == len(segments)-1
+		segIdx := segmentIndex(seg)
+		fp := filepath.Join(w.cfg.Dir, seg)
+		records, segStats, err := replaySegment(fp, isLast)
+		if err != nil {
+			return nil, stats, err
+		}
+		stats.Records += segStats.Records
+		stats.CorruptRecords += segStats.CorruptRecords
+		if segStats.TruncatedTail {
+			stats.TruncatedTail = true
+		}
+
+		for _, rec := range records {
+			var s Sample
+			if err := json.Unmarshal(rec, &s); err != nil {
+				stats.CorruptRecords++
+				continue
+			}
+			out = append(out, WALReplayedSample{Sample: s, Segment: segIdx})
+		}
+	}
+
 	return out, stats, nil
 }
 

@@ -64,14 +64,14 @@ func (a *Agent) Start() error {
 		}
 		a.wal = w
 
-		replayed, _, err := a.wal.ReplaySamples()
+		replayed, _, err := a.wal.ReplaySamplesWithSegments()
 		if err != nil {
 			_ = a.wal.Close()
 			a.wal = nil
 			return err
 		}
-		for _, s := range replayed {
-			a.buffer.Push(s)
+		for _, item := range replayed {
+			a.buffer.PushWithWALSegment(item.Sample, item.Segment)
 		}
 	}
 
@@ -144,10 +144,14 @@ func (a *Agent) collectLoop() {
 			return
 		case <-ticker.C:
 			s := a.collectSample()
-			a.buffer.Push(s)
+			walSegment := -1
 			if a.wal != nil {
-				_ = a.wal.WriteSample(s)
+				seg, err := a.wal.WriteSampleWithSegment(s)
+				if err == nil {
+					walSegment = seg
+				}
 			}
+			a.buffer.PushWithWALSegment(s, walSegment)
 		}
 	}
 }
@@ -231,18 +235,31 @@ func collectRuntimeValues() map[string]float64 {
 }
 
 func (a *Agent) flushExports() {
-	samples := a.buffer.DrainAll()
-	if len(samples) == 0 || len(a.cfg.Exporters) == 0 {
+	entries := a.buffer.DrainAllWithWALSegments()
+	if len(entries) == 0 || len(a.cfg.Exporters) == 0 {
 		return
+	}
+
+	samples := make([]Sample, 0, len(entries))
+	maxWALSegment := -1
+	for _, entry := range entries {
+		samples = append(samples, entry.sample)
+		if entry.walSegment > maxWALSegment {
+			maxWALSegment = entry.walSegment
+		}
 	}
 
 	for _, exp := range a.cfg.Exporters {
 		if err := a.exportWithRetry(exp, samples); err != nil {
-			for _, s := range samples {
-				a.buffer.Push(s)
+			for _, entry := range entries {
+				a.buffer.PushWithWALSegment(entry.sample, entry.walSegment)
 			}
 			return
 		}
+	}
+
+	if a.wal != nil && maxWALSegment >= 0 {
+		a.wal.AcknowledgeThrough(maxWALSegment)
 	}
 }
 

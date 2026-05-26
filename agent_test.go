@@ -234,3 +234,62 @@ func TestFlushExportsNonRetryableFailsFast(t *testing.T) {
 		t.Fatalf("expected sample to be requeued")
 	}
 }
+
+func TestFlushExportsAcknowledgesWALOnSuccess(t *testing.T) {
+	dir := t.TempDir()
+	w, err := NewWAL(WALConfig{Dir: dir, SegmentSize: 128, SyncEvery: 1})
+	if err != nil {
+		t.Fatalf("new wal: %v", err)
+	}
+	defer w.Close()
+
+	rec := &recordingExporter{}
+	a := New(Config{
+		Exporters:            []Exporter{rec},
+		ExportMaxRetries:     1,
+		ExportBackoffInitial: 1 * time.Millisecond,
+		ExportBackoffMax:     2 * time.Millisecond,
+		ExportBackoffJitter:  0,
+	})
+	a.ctx = context.Background()
+	a.wal = w
+
+	maxSegment := -1
+	for i := 0; i < 20; i++ {
+		s := Sample{
+			Timestamp: time.Now().UTC(),
+			Values: map[string]float64{
+				"v":   float64(i),
+				"pad": float64(i * 1000),
+			},
+		}
+		seg, err := w.WriteSampleWithSegment(s)
+		if err != nil {
+			t.Fatalf("write sample %d: %v", i, err)
+		}
+		if seg > maxSegment {
+			maxSegment = seg
+		}
+		a.buffer.PushWithWALSegment(s, seg)
+	}
+
+	if maxSegment < 1 {
+		t.Fatalf("expected multiple WAL segments, got max %d", maxSegment)
+	}
+
+	a.flushExports()
+
+	if w.acknowledgedThrough != maxSegment {
+		t.Fatalf("expected acknowledgedThrough=%d, got %d", maxSegment, w.acknowledgedThrough)
+	}
+
+	segments, err := listSegments(dir)
+	if err != nil {
+		t.Fatalf("list segments: %v", err)
+	}
+	for _, seg := range segments {
+		if idx := segmentIndex(seg); idx < maxSegment {
+			t.Fatalf("expected old segment compacted, found %s", seg)
+		}
+	}
+}

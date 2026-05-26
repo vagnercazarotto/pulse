@@ -11,11 +11,16 @@ var ErrInvalidBufferCapacity = errors.New("pulse: buffer capacity must be greate
 // RingBuffer is a fixed-size, thread-safe circular buffer for samples.
 type RingBuffer struct {
 	mu   sync.Mutex
-	data []Sample
+	data []bufferedSample
 	head int
 	size int
 
 	overflow atomic.Uint64
+}
+
+type bufferedSample struct {
+	sample     Sample
+	walSegment int
 }
 
 // NewRingBuffer creates a new ring buffer with fixed capacity.
@@ -23,32 +28,38 @@ func NewRingBuffer(capacity int) (*RingBuffer, error) {
 	if capacity <= 0 {
 		return nil, ErrInvalidBufferCapacity
 	}
-	return &RingBuffer{data: make([]Sample, capacity)}, nil
+	return &RingBuffer{data: make([]bufferedSample, capacity)}, nil
 }
 
 // Push inserts a sample. If full, the oldest sample is evicted.
 func (b *RingBuffer) Push(s Sample) {
+	b.PushWithWALSegment(s, -1)
+}
+
+// PushWithWALSegment inserts a sample and tracks the WAL segment id when known.
+func (b *RingBuffer) PushWithWALSegment(s Sample, walSegment int) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	if len(b.data) == 0 {
 		return
 	}
+	entry := bufferedSample{sample: cloneSample(s), walSegment: walSegment}
 
 	if b.size == len(b.data) {
-		b.data[b.head] = cloneSample(s)
+		b.data[b.head] = entry
 		b.head = (b.head + 1) % len(b.data)
 		b.overflow.Add(1)
 		return
 	}
 
 	tail := (b.head + b.size) % len(b.data)
-	b.data[tail] = cloneSample(s)
+	b.data[tail] = entry
 	b.size++
 }
 
-// DrainAll returns all samples in insertion order and clears the buffer.
-func (b *RingBuffer) DrainAll() []Sample {
+// DrainAllWithWALSegments returns all buffered entries and clears the buffer.
+func (b *RingBuffer) DrainAllWithWALSegments() []bufferedSample {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -56,13 +67,28 @@ func (b *RingBuffer) DrainAll() []Sample {
 		return nil
 	}
 
-	out := make([]Sample, 0, b.size)
+	out := make([]bufferedSample, 0, b.size)
 	for i := 0; i < b.size; i++ {
 		idx := (b.head + i) % len(b.data)
-		out = append(out, cloneSample(b.data[idx]))
+		entry := b.data[idx]
+		entry.sample = cloneSample(entry.sample)
+		out = append(out, entry)
 	}
 	b.head = 0
 	b.size = 0
+	return out
+}
+
+// DrainAll returns all samples in insertion order and clears the buffer.
+func (b *RingBuffer) DrainAll() []Sample {
+	entries := b.DrainAllWithWALSegments()
+	if len(entries) == 0 {
+		return nil
+	}
+	out := make([]Sample, 0, len(entries))
+	for _, entry := range entries {
+		out = append(out, entry.sample)
+	}
 	return out
 }
 
@@ -81,7 +107,7 @@ func (b *RingBuffer) Peek(n int) []Sample {
 	out := make([]Sample, 0, n)
 	for i := 0; i < n; i++ {
 		idx := (b.head + i) % len(b.data)
-		out = append(out, cloneSample(b.data[idx]))
+		out = append(out, cloneSample(b.data[idx].sample))
 	}
 	return out
 }
