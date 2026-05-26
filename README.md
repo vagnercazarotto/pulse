@@ -59,26 +59,3 @@ func main() {
 	errors.Inc()
 }
 ```
-
-## Documentation
-
-- Home: [docs/index.html](docs/index.html)
-- Quickstart: [docs/quickstart.html](docs/quickstart.html)
-- Current reference: [docs/current-reference.html](docs/current-reference.html)
-
-## Publish docs with GitHub Pages
-
-1. Open repository `Settings` on GitHub.
-2. Go to `Pages`.
-3. In `Build and deployment`, set `Source` to `Deploy from a branch`.
-4. Select branch `main`.
-5. Select folder `/docs`.
-6. Save.
-
-Expected URL:
-
-- https://vagnercazarotto.github.io/pulse/
-
-## Repository
-
-- https://github.com/vagnercazarotto/pulse
