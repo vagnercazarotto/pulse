@@ -3,6 +3,7 @@ package pulse
 import (
 	"context"
 	"errors"
+	"math/rand"
 	"runtime"
 	"sync"
 	"time"
@@ -235,21 +236,68 @@ func (a *Agent) flushExports() {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(a.ctx, a.cfg.ExportTimeout)
-	defer cancel()
-
 	for _, exp := range a.cfg.Exporters {
-		if err := exp.Export(ctx, samples); err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				for _, s := range samples {
-					a.buffer.Push(s)
-				}
-				return
-			}
+		if err := a.exportWithRetry(exp, samples); err != nil {
 			for _, s := range samples {
 				a.buffer.Push(s)
 			}
 			return
 		}
 	}
+}
+
+func (a *Agent) exportWithRetry(exp Exporter, samples []Sample) error {
+	maxAttempts := a.cfg.ExportMaxRetries + 1
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		ctx, cancel := context.WithTimeout(a.ctx, a.cfg.ExportTimeout)
+		err := exp.Export(ctx, samples)
+		cancel()
+
+		if err == nil {
+			return nil
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		if attempt == maxAttempts {
+			return err
+		}
+
+		wait := a.retryBackoff(attempt)
+		select {
+		case <-a.ctx.Done():
+			return a.ctx.Err()
+		case <-time.After(wait):
+		}
+	}
+	return nil
+}
+
+func (a *Agent) retryBackoff(attempt int) time.Duration {
+	backoff := a.cfg.ExportBackoffInitial
+	for i := 1; i < attempt; i++ {
+		if backoff >= a.cfg.ExportBackoffMax {
+			backoff = a.cfg.ExportBackoffMax
+			break
+		}
+		backoff *= 2
+		if backoff > a.cfg.ExportBackoffMax {
+			backoff = a.cfg.ExportBackoffMax
+			break
+		}
+	}
+
+	jitter := a.cfg.ExportBackoffJitter
+	if jitter <= 0 {
+		return backoff
+	}
+
+	spread := float64(backoff) * jitter
+	min := float64(backoff) - spread
+	max := float64(backoff) + spread
+	if min < 0 {
+		min = 0
+	}
+	delta := max - min
+	return time.Duration(min + rand.Float64()*delta)
 }

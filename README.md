@@ -16,14 +16,15 @@ Implemented baseline:
   - `Start()` after `Stop()` on the same instance returns `ErrAgentStopped`
 - Metrics registry with canonical label identity (`name|k=v|...`)
 - Runtime sample collection integrated into the agent loop
+- Linux hardware collection integrated into the agent loop (cpu, mem, disk, load)
 - Ring buffer integrated into agent flow with overflow tracking (`overflow_count`)
 - WAL persistence integrated into agent flow with replay on startup
-- Export loop with context-based timeout and requeue-on-error behavior
+- Export loop with context-based timeout, configurable retry/backoff, and requeue-on-error behavior
 
 ## Current scope (v0.1.0)
 
 - Runtime collector
-- Linux hardware collector (CPU, memory, disk, load) - planned
+- Linux hardware collector (CPU, memory, disk, load)
 - Metrics core (counter, gauge, histogram, timer)
 - Ring buffer + WAL
 - HTTP exporter + log exporter
@@ -71,6 +72,10 @@ When zero values are provided in `pulse.Config`, defaults are applied:
 - `ExportTimeout`: 3s
 - `BufferSize`: 10,000 samples
 - `ShutdownTimeout`: 5s
+- `ExportMaxRetries`: 5
+- `ExportBackoffInitial`: 500ms
+- `ExportBackoffMax`: 30s
+- `ExportBackoffJitter`: 0.20
 
 Optional WAL:
 
@@ -96,15 +101,29 @@ The agent currently includes runtime metrics in each sample, including:
 
 Application metrics from the registry are merged into the same sample payload.
 
+## Hardware metrics currently collected (Linux)
+
+- `hw.cpu_percent`
+- `hw.mem_total_bytes`
+- `hw.mem_available_bytes`
+- `hw.mem_used_percent`
+- `hw.disk_total_bytes`
+- `hw.disk_used_bytes`
+- `hw.disk_used_percent`
+- `hw.load1`
+- `hw.load5`
+- `hw.load15`
+
 ## What is implemented vs planned
 
 Implemented now:
 
 - Core agent lifecycle and loops
 - Runtime sample generation
+- Linux hardware sample generation
 - In-memory ring buffer
 - WAL write/replay primitives and startup replay path
-- Exporter contract and export loop wiring
+- Exporter contract and export loop wiring with configurable retry/backoff
 
 Planned next:
 

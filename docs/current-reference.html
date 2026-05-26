@@ -31,10 +31,22 @@
     <section class="card">
       <h2>Retry and backoff</h2>
       <ul>
-        <li>Max retries: 5</li>
-        <li>Initial backoff: 500ms</li>
-        <li>Backoff cap: 30s</li>
-        <li>Strategy: exponential + jitter</li>
+        <li>Configurable in code via Config.</li>
+        <li>Default max retries: 5</li>
+        <li>Default initial backoff: 500ms</li>
+        <li>Default backoff cap: 30s</li>
+        <li>Default jitter factor: 0.20</li>
+        <li>Strategy: exponential backoff with jitter.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Hardware collection (Linux)</h2>
+      <ul>
+        <li>Integrated in the agent sample loop.</li>
+        <li>Includes CPU usage, memory usage, disk usage, and load averages.</li>
+        <li>Can be disabled with Config.DisableHardware.</li>
+        <li>Non-Linux platforms use a no-op collector for development compatibility.</li>
       </ul>
     </section>
 

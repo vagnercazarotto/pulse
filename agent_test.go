@@ -2,6 +2,7 @@ package pulse
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -91,6 +92,33 @@ func (e *recordingExporter) totals() (int, int) {
 	return e.batches, e.count
 }
 
+type flakyExporter struct {
+	mu        sync.Mutex
+	failsLeft int
+	calls     int
+	succeeded bool
+}
+
+func (e *flakyExporter) Name() string { return "flaky" }
+func (e *flakyExporter) Close() error { return nil }
+func (e *flakyExporter) Export(_ context.Context, _ []Sample) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.calls++
+	if e.failsLeft > 0 {
+		e.failsLeft--
+		return errors.New("transient export error")
+	}
+	e.succeeded = true
+	return nil
+}
+
+func (e *flakyExporter) snapshot() (int, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.calls, e.succeeded
+}
+
 func TestAgentReplaysWALAndExports(t *testing.T) {
 	dir := t.TempDir()
 	w, err := NewWAL(WALConfig{Dir: dir, SyncEvery: 1})
@@ -122,5 +150,57 @@ func TestAgentReplaysWALAndExports(t *testing.T) {
 	_, count := rec.totals()
 	if count == 0 {
 		t.Fatalf("expected at least one exported sample from WAL replay")
+	}
+}
+
+func TestFlushExportsRetriesAndEventuallySucceeds(t *testing.T) {
+	fx := &flakyExporter{failsLeft: 2}
+	a := New(Config{
+		Exporters:            []Exporter{fx},
+		ExportMaxRetries:     3,
+		ExportBackoffInitial: 1 * time.Millisecond,
+		ExportBackoffMax:     2 * time.Millisecond,
+		ExportBackoffJitter:  0,
+	})
+	a.ctx = context.Background()
+	a.buffer.Push(Sample{Timestamp: time.Now().UTC(), Values: map[string]float64{"x": 1}})
+
+	a.flushExports()
+
+	calls, succeeded := fx.snapshot()
+	if !succeeded {
+		t.Fatalf("expected exporter to succeed after retries")
+	}
+	if calls != 3 {
+		t.Fatalf("expected 3 calls, got %d", calls)
+	}
+	if a.BufferLen() != 0 {
+		t.Fatalf("expected buffer to be empty after successful export")
+	}
+}
+
+func TestFlushExportsRequeuesAfterExhaustedRetries(t *testing.T) {
+	fx := &flakyExporter{failsLeft: 10}
+	a := New(Config{
+		Exporters:            []Exporter{fx},
+		ExportMaxRetries:     2,
+		ExportBackoffInitial: 1 * time.Millisecond,
+		ExportBackoffMax:     2 * time.Millisecond,
+		ExportBackoffJitter:  0,
+	})
+	a.ctx = context.Background()
+	a.buffer.Push(Sample{Timestamp: time.Now().UTC(), Values: map[string]float64{"x": 1}})
+
+	a.flushExports()
+
+	calls, succeeded := fx.snapshot()
+	if succeeded {
+		t.Fatalf("expected exporter to fail after retries")
+	}
+	if calls != 3 {
+		t.Fatalf("expected 3 calls (1 + 2 retries), got %d", calls)
+	}
+	if a.BufferLen() == 0 {
+		t.Fatalf("expected sample to be requeued")
 	}
 }
