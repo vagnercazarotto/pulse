@@ -210,9 +210,9 @@ func main() {
 
 ## Documentation
 
-- Home: [Documentation Home](docs/index.html)
-- Quickstart: [Quickstart Guide](docs/quickstart.html)
-- Current reference: [Current Reference](docs/current-reference.html)
+- Home: [Documentation Home](https://vagnercazarotto.github.io/pulse/)
+- Quickstart: [Quickstart Guide](https://vagnercazarotto.github.io/pulse/quickstart.html)
+- Current reference: [Current Reference](https://vagnercazarotto.github.io/pulse/current-reference.html)
 
 ## Default behavior
 
