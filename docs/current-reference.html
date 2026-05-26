@@ -29,6 +29,16 @@
     </section>
 
     <section class="card">
+      <h2>Metrics core</h2>
+      <ul>
+        <li>Counter and Gauge snapshot as scalar values.</li>
+        <li>Histogram snapshot exports `_bucket`, `_count`, and `_sum` series.</li>
+        <li>Timer records durations in seconds on top of histogram buckets.</li>
+        <li>Metric identity remains name + labels sorted by key.</li>
+      </ul>
+    </section>
+
+    <section class="card">
       <h2>Retry and backoff</h2>
       <ul>
         <li>Configurable in code via Config.</li>
@@ -45,7 +55,7 @@
       <h2>Hardware collection (Linux)</h2>
       <ul>
         <li>Integrated in the agent sample loop.</li>
-        <li>Includes CPU usage, memory usage, disk usage, and load averages.</li>
+        <li>Includes CPU usage, memory usage, disk usage, load averages, and CPU temperature when the thermal interface is available.</li>
         <li>Can be disabled with Config.DisableHardware.</li>
         <li>Non-Linux platforms use a no-op collector for development compatibility.</li>
       </ul>
@@ -59,6 +69,7 @@
         <li>Format: length prefix + payload + crc32.</li>
         <li>Replay in order; partial tail is truncated to the last valid record.</li>
         <li>Rotation: 64 MiB segments, 512 MiB total cap.</li>
+        <li>The current build prioritizes durable append and startup replay; segment cleanup remains conservative.</li>
       </ul>
     </section>
 

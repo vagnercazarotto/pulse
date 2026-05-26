@@ -31,7 +31,7 @@ Implemented baseline:
   - `Start()` after `Stop()` on the same instance returns `ErrAgentStopped`
 - Metrics registry with canonical label identity (`name|k=v|...`)
 - Runtime sample collection integrated into the agent loop
-- Linux hardware collection integrated into the agent loop (cpu, mem, disk, load)
+- Linux hardware collection integrated into the agent loop (cpu, mem, disk, load, temp when available)
 - Ring buffer integrated into agent flow with overflow tracking (`overflow_count`)
 - WAL persistence integrated into agent flow with replay on startup
 - Export loop with context-based timeout, configurable retry/backoff, and requeue-on-error behavior
@@ -39,7 +39,7 @@ Implemented baseline:
 ## Current scope (v0.1.0)
 
 - Runtime collector
-- Linux hardware collector (CPU, memory, disk, load)
+- Linux hardware collector (CPU, memory, disk, load, temperature when available)
 - Metrics core (counter, gauge, histogram, timer)
 - Ring buffer + WAL
 - HTTP exporter + log exporter
@@ -167,6 +167,7 @@ func main() {
 
 Available endpoints:
 
+- `/`
 - `/health`
 - `/metrics.json`
 - `/metrics`
@@ -231,6 +232,7 @@ When zero values are provided in `pulse.Config`, defaults are applied:
 Optional WAL:
 
 - Set `Config.WAL` with a valid directory to enable disk persistence and replay.
+- Current implementation focuses on durable segmented writes and startup replay; segment cleanup remains conservative.
 
 ## Runtime metrics currently collected
 
@@ -261,6 +263,7 @@ Application metrics from the registry are merged into the same sample payload.
 - `hw.disk_total_bytes`
 - `hw.disk_used_bytes`
 - `hw.disk_used_percent`
+- `hw.cpu_temp_celsius` (when exposed by the Linux host)
 - `hw.load1`
 - `hw.load5`
 - `hw.load15`

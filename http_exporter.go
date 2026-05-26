@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -107,6 +109,7 @@ func (e *HTTPExporter) Addr() string {
 
 func (e *HTTPExporter) start() error {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/", e.handleDashboard)
 	mux.HandleFunc("/health", e.handleHealth)
 	mux.HandleFunc("/metrics.json", e.handleMetricsJSON)
 	mux.HandleFunc("/metrics", e.handlePrometheus)
@@ -131,6 +134,38 @@ func (e *HTTPExporter) start() error {
 		_ = srv.Serve(ln)
 	}()
 	return nil
+}
+
+func (e *HTTPExporter) handleDashboard(w http.ResponseWriter, _ *http.Request) {
+	latest, latestAt, ok := e.getLatest()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	var b strings.Builder
+	b.WriteString("<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>pulse local dashboard</title>")
+	b.WriteString("<style>body{font-family:Segoe UI,Arial,sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;color:#1f2937}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:.45rem;border-bottom:1px solid #e5e7eb}code{background:#f3f4f6;padding:.1rem .3rem;border-radius:4px}a{color:#0f766e;text-decoration:none}small{color:#6b7280}</style>")
+	b.WriteString("</head><body><h1>pulse local dashboard</h1><p><a href=\"/health\">/health</a> | <a href=\"/metrics.json\">/metrics.json</a> | <a href=\"/metrics\">/metrics</a></p>")
+	if !ok {
+		b.WriteString("<p>No samples available yet.</p></body></html>")
+		_, _ = w.Write([]byte(b.String()))
+		return
+	}
+	b.WriteString("<p><small>Latest sample: ")
+	b.WriteString(html.EscapeString(latestAt.Format(time.RFC3339)))
+	b.WriteString("</small></p><table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>")
+	keys := make([]string, 0, len(latest.Values))
+	for key := range latest.Values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		b.WriteString("<tr><td><code>")
+		b.WriteString(html.EscapeString(key))
+		b.WriteString("</code></td><td>")
+		b.WriteString(strconv.FormatFloat(latest.Values[key], 'f', -1, 64))
+		b.WriteString("</td></tr>")
+	}
+	b.WriteString("</tbody></table></body></html>")
+	_, _ = w.Write([]byte(b.String()))
 }
 
 func (e *HTTPExporter) handleHealth(w http.ResponseWriter, _ *http.Request) {

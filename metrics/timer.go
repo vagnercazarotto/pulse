@@ -27,11 +27,13 @@ func (r *Registry) TimerWithBuckets(name string, labels map[string]string, bucke
 func (t *Timer) Start() func() {
 	start := time.Now()
 	return func() {
-		_ = time.Since(start)
-		// Observation storage will be implemented in the histogram hot path increment.
+		t.Record(time.Since(start))
 	}
 }
 
-func (t *Timer) Record(_ time.Duration) {
-	// Observation storage will be implemented in the histogram hot path increment.
+func (t *Timer) Record(d time.Duration) {
+	if t == nil || t.h == nil {
+		return
+	}
+	t.h.Observe(d.Seconds())
 }

@@ -5,6 +5,7 @@ package pulse
 import (
 	"bufio"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -55,6 +56,10 @@ func (h *hardwareCollector) Collect() map[string]float64 {
 		out["hw.load1"] = l1
 		out["hw.load5"] = l5
 		out["hw.load15"] = l15
+	}
+
+	if tempC, okTemp := readCPUTempCelsius(); okTemp {
+		out["hw.cpu_temp_celsius"] = tempC
 	}
 
 	return out
@@ -190,4 +195,24 @@ func readLoadAvg() (l1 float64, l5 float64, l15 float64, ok bool) {
 		return 0, 0, 0, false
 	}
 	return v1, v5, v15, true
+}
+
+func readCPUTempCelsius() (float64, bool) {
+	paths, err := filepath.Glob("/sys/class/thermal/thermal_zone*/temp")
+	if err != nil || len(paths) == 0 {
+		return 0, false
+	}
+	for _, path := range paths {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		raw := strings.TrimSpace(string(b))
+		value, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			continue
+		}
+		return value / 1000.0, true
+	}
+	return 0, false
 }

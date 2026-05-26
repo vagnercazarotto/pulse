@@ -25,8 +25,9 @@ func TestHTTPExporterServesHealthAndMetrics(t *testing.T) {
 	}
 
 	deadline := time.Now().Add(2 * time.Second)
-	var healthURL, metricsJSONURL, metricsURL string
+	var healthURL, metricsJSONURL, metricsURL, dashboardURL string
 	for time.Now().Before(deadline) {
+		dashboardURL = exp.URL("/")
 		healthURL = exp.URL("/health")
 		metricsJSONURL = exp.URL("/metrics.json")
 		metricsURL = exp.URL("/metrics")
@@ -37,6 +38,19 @@ func TestHTTPExporterServesHealthAndMetrics(t *testing.T) {
 	}
 	if healthURL == "" {
 		t.Fatalf("http exporter did not start")
+	}
+
+	dashboardResp, err := http.Get(dashboardURL)
+	if err != nil {
+		t.Fatalf("dashboard request failed: %v", err)
+	}
+	defer dashboardResp.Body.Close()
+	if dashboardResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected dashboard 200, got %d", dashboardResp.StatusCode)
+	}
+	dashboardBody, _ := io.ReadAll(dashboardResp.Body)
+	if !strings.Contains(string(dashboardBody), "pulse local dashboard") {
+		t.Fatalf("expected dashboard page content")
 	}
 
 	healthResp, err := http.Get(healthURL)

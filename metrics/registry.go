@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -113,13 +114,31 @@ func (r *Registry) Gauge(name string, labels map[string]string) *Gauge {
 	return g
 }
 
-func (g *Gauge) Set(v float64)  { g.value.Store(mathFloat64bits(v)) }
+func (g *Gauge) Set(v float64) { g.value.Store(mathFloat64bits(v)) }
+
+func (g *Gauge) Add(delta float64) {
+	for {
+		currentBits := g.value.Load()
+		next := mathFloat64frombits(currentBits) + delta
+		if g.value.CompareAndSwap(currentBits, mathFloat64bits(next)) {
+			return
+		}
+	}
+}
+
+func (g *Gauge) Inc() { g.Add(1) }
+
+func (g *Gauge) Dec() { g.Add(-1) }
+
 func (g *Gauge) Value() float64 { return mathFloat64frombits(g.value.Load()) }
 
 type Histogram struct {
 	name    string
 	labels  map[string]string
 	buckets []float64
+	counts  []atomic.Uint64
+	count   atomic.Uint64
+	sumBits atomic.Uint64
 }
 
 func (r *Registry) Histogram(name string, labels map[string]string, buckets ...float64) (*Histogram, error) {
@@ -137,9 +156,31 @@ func (r *Registry) Histogram(name string, labels map[string]string, buckets ...f
 		return h, nil
 	}
 
-	h := &Histogram{name: name, labels: copyLabels(labels), buckets: append([]float64(nil), buckets...)}
+	h := &Histogram{
+		name:    name,
+		labels:  copyLabels(labels),
+		buckets: append([]float64(nil), buckets...),
+		counts:  make([]atomic.Uint64, len(buckets)),
+	}
 	r.histograms[key] = h
 	return h, nil
+}
+
+func (h *Histogram) Observe(v float64) {
+	idx := sort.SearchFloat64s(h.buckets, v)
+	if idx < len(h.counts) {
+		h.counts[idx].Add(1)
+	}
+	h.count.Add(1)
+	addAtomicFloat64(&h.sumBits, v)
+}
+
+func (h *Histogram) Count() uint64 {
+	return h.count.Load()
+}
+
+func (h *Histogram) Sum() float64 {
+	return mathFloat64frombits(h.sumBits.Load())
 }
 
 func equalFloatSlices(a, b []float64) bool {
@@ -155,17 +196,54 @@ func equalFloatSlices(a, b []float64) bool {
 }
 
 // SnapshotValues returns scalar values keyed by canonical metric identity.
-// Counters and gauges are included in this baseline snapshot.
+// Counters, gauges, and histogram-derived series are included.
 func (r *Registry) SnapshotValues() map[string]float64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	out := make(map[string]float64, len(r.counters)+len(r.gauges))
+	out := make(map[string]float64, len(r.counters)+len(r.gauges)+(len(r.histograms)*4))
 	for key, c := range r.counters {
 		out[key] = float64(c.Value())
 	}
 	for key, g := range r.gauges {
 		out[key] = g.Value()
 	}
+	for _, h := range r.histograms {
+		count := h.Count()
+		out[CanonicalKey(h.name+"_count", h.labels)] = float64(count)
+		out[CanonicalKey(h.name+"_sum", h.labels)] = h.Sum()
+
+		cumulative := uint64(0)
+		for i, bucket := range h.buckets {
+			cumulative += h.counts[i].Load()
+			labels := copyLabels(h.labels)
+			if labels == nil {
+				labels = make(map[string]string, 1)
+			}
+			labels["le"] = formatBucket(bucket)
+			out[CanonicalKey(h.name+"_bucket", labels)] = float64(cumulative)
+		}
+
+		labels := copyLabels(h.labels)
+		if labels == nil {
+			labels = make(map[string]string, 1)
+		}
+		labels["le"] = "+Inf"
+		out[CanonicalKey(h.name+"_bucket", labels)] = float64(count)
+	}
 	return out
+}
+
+func addAtomicFloat64(dst *atomic.Uint64, delta float64) {
+	for {
+		currentBits := dst.Load()
+		next := mathFloat64frombits(currentBits) + delta
+		if dst.CompareAndSwap(currentBits, mathFloat64bits(next)) {
+			return
+		}
+	}
+}
+
+func formatBucket(v float64) string {
+	return strconv.FormatFloat(v, 'f', -1, 64)
 }

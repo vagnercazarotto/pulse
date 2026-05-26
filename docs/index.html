@@ -34,7 +34,7 @@
         <li>Target platform: Raspberry Pi 4 (Linux ARM64).</li>
         <li>Default collection interval: 10 seconds.</li>
         <li>Default buffer size: 10,000 samples.</li>
-        <li>Minimum offline window: 24 hours.</li>
+        <li>Optional WAL-based local persistence and startup replay.</li>
         <li>Lifecycle: Stop is idempotent, Start after Stop returns an error.</li>
         <li>Official shutdown timeout: 5 seconds.</li>
       </ul>
@@ -44,7 +44,7 @@
       <h2>v0.1.0 scope</h2>
       <ul>
         <li>Runtime collector.</li>
-        <li>Linux hardware collector (cpu, mem, disk, load).</li>
+        <li>Linux hardware collector (cpu, mem, disk, load, temp when available).</li>
         <li>Metrics core with labels.</li>
         <li>Ring buffer + WAL.</li>
         <li>HTTP and Log exporters.</li>
