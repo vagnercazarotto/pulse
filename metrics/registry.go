@@ -153,3 +153,19 @@ func equalFloatSlices(a, b []float64) bool {
 	}
 	return true
 }
+
+// SnapshotValues returns scalar values keyed by canonical metric identity.
+// Counters and gauges are included in this baseline snapshot.
+func (r *Registry) SnapshotValues() map[string]float64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	out := make(map[string]float64, len(r.counters)+len(r.gauges))
+	for key, c := range r.counters {
+		out[key] = float64(c.Value())
+	}
+	for key, g := range r.gauges {
+		out[key] = g.Value()
+	}
+	return out
+}
