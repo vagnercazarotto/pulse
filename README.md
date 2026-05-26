@@ -1,5 +1,7 @@
 # pulse
 
+[![status: placeholder](https://img.shields.io/badge/status-placeholder-lightgrey)](#)
+
 Embedded observability for industrial Go gateways.
 
 pulse is designed for constrained edge environments where reliability matters more than cloud dependency.
@@ -132,6 +134,20 @@ Application metrics from the registry are merged into the same sample payload.
 - `hw.load1`
 - `hw.load5`
 - `hw.load15`
+
+## Compatibility
+
+Linux (runtime target):
+
+- Linux hardware metrics are implemented and collected from `/proc` and filesystem stats.
+- Recommended target for edge runtime and deployment baseline.
+
+Windows (development notes):
+
+- Project builds and root package tests are supported for development workflows.
+- In environments with Application Control/AppLocker, `go test ./...` may fail because Go executes temporary test binaries from build cache paths.
+- Practical workaround in restricted environments: prefer `go build ./...` for validation and run targeted tests where policy allows execution.
+- Hardware collector on non-Linux platforms uses a safe no-op stub by design.
 
 ## Export error handling
 
