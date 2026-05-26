@@ -97,6 +97,7 @@ type flakyExporter struct {
 	failsLeft int
 	calls     int
 	succeeded bool
+	nonRetry  bool
 }
 
 func (e *flakyExporter) Name() string { return "flaky" }
@@ -107,6 +108,9 @@ func (e *flakyExporter) Export(_ context.Context, _ []Sample) error {
 	e.calls++
 	if e.failsLeft > 0 {
 		e.failsLeft--
+		if e.nonRetry {
+			return NonRetryable(errors.New("permanent export error"))
+		}
 		return errors.New("transient export error")
 	}
 	e.succeeded = true
@@ -199,6 +203,32 @@ func TestFlushExportsRequeuesAfterExhaustedRetries(t *testing.T) {
 	}
 	if calls != 3 {
 		t.Fatalf("expected 3 calls (1 + 2 retries), got %d", calls)
+	}
+	if a.BufferLen() == 0 {
+		t.Fatalf("expected sample to be requeued")
+	}
+}
+
+func TestFlushExportsNonRetryableFailsFast(t *testing.T) {
+	fx := &flakyExporter{failsLeft: 1, nonRetry: true}
+	a := New(Config{
+		Exporters:            []Exporter{fx},
+		ExportMaxRetries:     5,
+		ExportBackoffInitial: 1 * time.Millisecond,
+		ExportBackoffMax:     2 * time.Millisecond,
+		ExportBackoffJitter:  0,
+	})
+	a.ctx = context.Background()
+	a.buffer.Push(Sample{Timestamp: time.Now().UTC(), Values: map[string]float64{"x": 1}})
+
+	a.flushExports()
+
+	calls, succeeded := fx.snapshot()
+	if succeeded {
+		t.Fatalf("expected exporter to fail")
+	}
+	if calls != 1 {
+		t.Fatalf("expected 1 call for non-retryable error, got %d", calls)
 	}
 	if a.BufferLen() == 0 {
 		t.Fatalf("expected sample to be requeued")

@@ -256,6 +256,9 @@ func (a *Agent) exportWithRetry(exp Exporter, samples []Sample) error {
 		if err == nil {
 			return nil
 		}
+		if IsNonRetryable(err) {
+			return err
+		}
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}

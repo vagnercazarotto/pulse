@@ -22,8 +22,13 @@
     <section class="card">
       <h2>1. Recommended default config</h2>
       <pre><code>CollectInterval: 10 * time.Second
+ExportInterval:  10 * time.Second
+ExportTimeout:   3 * time.Second
 BufferSize:      10_000
-OfflineWindow:   24h
+ExportMaxRetries: 5
+BackoffInitial:  500 * time.Millisecond
+BackoffMax:      30 * time.Second
+BackoffJitter:   0.20
 ShutdownTimeout: 5 * time.Second</code></pre>
     </section>
 
@@ -38,12 +43,13 @@ ShutdownTimeout: 5 * time.Second</code></pre>
 
     <section class="card">
       <h2>3. Metrics with labels</h2>
-      <pre><code>errors := agent.Counter("modbus.errors", map[string]string{
+      <pre><code>errors := agent.Metrics().Counter("modbus.errors", map[string]string{
   "device": "boiler-01",
   "protocol": "tcp",
 })
+errors.Inc()
 
-latency, err := agent.Histogram(
+latency, err := agent.Metrics().Histogram(
   "modbus.poll_latency_s",
   map[string]string{"device": "boiler-01"},
   0.01, 0.05, 0.1, 0.5, 1.0,
